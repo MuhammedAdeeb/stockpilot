@@ -506,11 +506,18 @@ function Orders({ toast }) {
 // ════════════════════════════════════════════════════════════
 export default function Home() {
   const [page, setPage] = useState('dashboard');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [toastMsg, setToastMsg] = useState('');
   const [toastError, setToastError] = useState(false);
 
   const showToast = useCallback((msg, isError = false) => {
     setToastMsg(msg); setToastError(isError);
+  }, []);
+
+  const navigate = useCallback((key) => {
+    setPage(key);
+    // Increment refreshKey every time dashboard is selected so it remounts and refetches
+    if (key === 'dashboard') setRefreshKey(k => k + 1);
   }, []);
 
   const pages = { dashboard: Dashboard, products: Products, orders: Orders, customers: Customers };
@@ -523,13 +530,16 @@ export default function Home() {
     { key: 'customers', icon: '◉', label: 'Customers' },
   ];
 
+  // Use refreshKey as part of the key for dashboard so it remounts on every visit
+  const componentKey = page === 'dashboard' ? `dashboard-${refreshKey}` : page;
+
   return (
     <div className="layout">
       <nav className="sidebar">
         <div className="logo">StockPilot<span>Inventory System</span></div>
         <div className="nav">
           {navItems.map(n => (
-            <div key={n.key} className={`nav-link${page === n.key ? ' active' : ''}`} onClick={() => setPage(n.key)}>
+            <div key={n.key} className={`nav-link${page === n.key ? ' active' : ''}`} onClick={() => navigate(n.key)}>
               <span className="nav-icon">{n.icon}</span>
               <span>{n.label}</span>
             </div>
@@ -538,7 +548,7 @@ export default function Home() {
       </nav>
 
       <main className="main">
-        <PageComponent key={page} toast={showToast} />
+        <PageComponent key={componentKey} toast={showToast} />
       </main>
 
       <Toast message={toastMsg} isError={toastError} onDone={() => setToastMsg('')} />
