@@ -3,15 +3,15 @@ import { getDb, uid } from '@/lib/db';
 
 export async function GET() {
   try {
-    const db = getDb();
-    const customers = db.prepare(`
+    const db = await getDb();
+    const { rows } = await db.execute(`
       SELECT c.*, COUNT(o.id) as order_count
       FROM customers c
       LEFT JOIN orders o ON o.customer_id = c.id
       GROUP BY c.id
       ORDER BY c.created_at DESC
-    `).all();
-    return NextResponse.json(customers);
+    `);
+    return NextResponse.json(rows);
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
@@ -23,10 +23,14 @@ export async function POST(request) {
     if (!name || !phone || !address)
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
 
-    const db = getDb();
+    const db = await getDb();
     const id = uid();
-    db.prepare('INSERT INTO customers (id,name,phone,address) VALUES (?,?,?,?)').run(id, name, phone, address);
-    return NextResponse.json(db.prepare('SELECT * FROM customers WHERE id=?').get(id));
+    await db.execute({
+      sql: 'INSERT INTO customers (id,name,phone,address) VALUES (?,?,?,?)',
+      args: [id, name, phone, address],
+    });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM customers WHERE id=?', args: [id] });
+    return NextResponse.json(rows[0]);
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

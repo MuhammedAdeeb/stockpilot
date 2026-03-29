@@ -1,31 +1,49 @@
-# StockPilot — Next.js + SQLite Inventory Tracker
+# StockPilot — Next.js + Turso Inventory Tracker
 
-Full-stack inventory management system built with **Next.js 14 App Router** and **SQLite** via `better-sqlite3`.
-
----
-
-## ⚡ Deploy to Vercel (Recommended)
-
-> **Important note about SQLite on Vercel:**  
-> Vercel's serverless functions are stateless — the filesystem resets between deployments. SQLite data is stored in `/tmp` at runtime, which persists across requests **within the same instance** but is not permanent across deployments or cold starts.  
->
-> **For production use with persistent data**, connect a free database instead:
-> - [Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres) (free tier, Postgres)
-> - [Turso](https://turso.tech) (free tier, SQLite-compatible, truly persistent)
-> - [PlanetScale](https://planetscale.com) (free tier, MySQL)
->
-> For personal/demo use, SQLite on Vercel works fine within a session.
-
-### Steps:
-1. Push this folder to a GitHub repository
-2. Go to [vercel.com](https://vercel.com) → **Add New Project**
-3. Import your GitHub repo
-4. Vercel auto-detects Next.js — click **Deploy**
-5. Done! You get a URL like `stockpilot.vercel.app`
+Full-stack inventory management built with **Next.js 14** and **Turso** (cloud SQLite).  
+Data is permanently persisted in Turso — survives deployments, cold starts, and scaling.
 
 ---
 
-## 💻 Run Locally
+## 🚀 Setup
+
+### 1. Get your Turso credentials
+
+**Option A — Web dashboard (no CLI needed):**
+1. Sign up at [turso.tech](https://turso.tech)
+2. Create a database named `stockpilot`
+3. Copy the database URL (`libsql://stockpilot-<yourname>.turso.io`)
+4. Generate an auth token from the dashboard
+
+**Option B — Turso CLI (Mac/Linux/WSL):**
+```bash
+curl -sSfL https://get.tur.so/install.sh | bash
+turso auth login
+turso db create stockpilot
+turso db show stockpilot --url
+turso db tokens create stockpilot
+```
+
+**Option B — Turso CLI (Windows with Scoop):**
+```powershell
+irm get.scoop.sh | iex
+scoop bucket add turso https://github.com/tursodatabase/scoop-bucket.git
+scoop install turso
+turso auth login
+turso db create stockpilot
+turso db show stockpilot --url
+turso db tokens create stockpilot
+```
+
+### 2. Configure environment variables
+
+Copy `.env.local.example` to `.env.local` and fill in your values:
+```
+TURSO_DATABASE_URL=libsql://stockpilot-<yourname>.turso.io
+TURSO_AUTH_TOKEN=your-auth-token-here
+```
+
+### 3. Install and run
 
 ```bash
 npm install
@@ -33,52 +51,42 @@ npm run dev
 # Open http://localhost:3000
 ```
 
-Data is stored in `./data/stockpilot.db` locally (created automatically).
+---
+
+## 🌐 Deploy to Vercel
+
+1. Push this folder to a GitHub repository
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import repo
+3. Before deploying, go to **Environment Variables** and add:
+   - `TURSO_DATABASE_URL`
+   - `TURSO_AUTH_TOKEN`
+4. Click **Deploy**
 
 ---
 
 ## 📁 Project Structure
 
 ```
-stockpilot-next/
+stockpilot/
 ├── app/
-│   ├── layout.js              # Root HTML layout
-│   ├── page.js                # Full React SPA (client component)
-│   ├── globals.css            # All styles
+│   ├── layout.js
+│   ├── page.js                  # Full React SPA
+│   ├── globals.css
 │   └── api/
-│       ├── dashboard/route.js # GET /api/dashboard
+│       ├── dashboard/route.js   # GET /api/dashboard
 │       ├── products/
-│       │   ├── route.js       # GET, POST /api/products
-│       │   └── [id]/route.js  # PUT, DELETE /api/products/:id
+│       │   ├── route.js         # GET, POST
+│       │   └── [id]/route.js    # PUT, DELETE
 │       ├── customers/
-│       │   ├── route.js       # GET, POST /api/customers
-│       │   └── [id]/route.js  # PUT, DELETE /api/customers/:id
+│       │   ├── route.js         # GET, POST
+│       │   └── [id]/route.js    # PUT, DELETE
 │       └── orders/
-│           ├── route.js       # GET, POST /api/orders
-│           └── [id]/route.js  # PATCH, DELETE /api/orders/:id
+│           ├── route.js         # GET, POST
+│           └── [id]/route.js    # PATCH, DELETE
 ├── lib/
-│   └── db.js                  # SQLite singleton + seed data
+│   └── db.js                    # Turso client + schema + seed
+├── .env.local.example
 ├── next.config.js
 ├── jsconfig.json
 └── package.json
 ```
-
----
-
-## 🔌 API Reference
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/dashboard | Stats summary |
-| GET | /api/products | All products |
-| POST | /api/products | Create product |
-| PUT | /api/products/:id | Update product |
-| DELETE | /api/products/:id | Delete product |
-| GET | /api/customers | All customers + order count |
-| POST | /api/customers | Create customer |
-| PUT | /api/customers/:id | Update customer |
-| DELETE | /api/customers/:id | Delete customer |
-| GET | /api/orders | All orders (joined) |
-| POST | /api/orders | Create order (deducts stock) |
-| PATCH | /api/orders/:id | Update order status (manages stock) |
-| DELETE | /api/orders/:id | Delete order (restores stock) |

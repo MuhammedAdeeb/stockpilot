@@ -7,11 +7,7 @@ node_modules/
 /.next/
 /out/
 
-# database — don't commit SQLite files
-/data/
-*.db
-
-# env files
+# env — never commit real credentials
 .env
 .env.local
 .env.*.local

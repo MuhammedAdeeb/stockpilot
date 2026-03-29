@@ -4,25 +4,38 @@ import { getDb } from '@/lib/db';
 export async function PATCH(request, { params }) {
   try {
     const { status } = await request.json();
-    const db = getDb();
-    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(params.id);
+    const db = await getDb();
+
+    const { rows } = await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [params.id] });
+    const order = rows[0];
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
     const oldStatus = order.status;
     if (oldStatus === status) return NextResponse.json({ success: true });
 
-    const update = db.transaction(() => {
-      if (oldStatus !== 'Returned' && status === 'Returned') {
-        db.prepare('UPDATE products SET units = units + ? WHERE id=?').run(order.qty, order.product_id);
-      } else if (oldStatus === 'Returned' && status !== 'Returned') {
-        const product = db.prepare('SELECT * FROM products WHERE id=?').get(order.product_id);
-        if (product.units < order.qty) throw new Error(`Only ${product.units} units available`);
-        db.prepare('UPDATE products SET units = units - ? WHERE id=?').run(order.qty, order.product_id);
-      }
-      db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, params.id);
-    });
-    update();
+    const statements = [
+      { sql: 'UPDATE orders SET status=? WHERE id=?', args: [status, params.id] },
+    ];
 
+    if (oldStatus !== 'Returned' && status === 'Returned') {
+      // Returning: restore stock
+      statements.push({
+        sql: 'UPDATE products SET units = units + ? WHERE id=?',
+        args: [Number(order.qty), order.product_id],
+      });
+    } else if (oldStatus === 'Returned' && status !== 'Returned') {
+      // Un-returning: check stock then deduct
+      const { rows: pRows } = await db.execute({ sql: 'SELECT * FROM products WHERE id=?', args: [order.product_id] });
+      const product = pRows[0];
+      if (!product || Number(product.units) < Number(order.qty))
+        return NextResponse.json({ error: `Only ${product?.units ?? 0} units available` }, { status: 400 });
+      statements.push({
+        sql: 'UPDATE products SET units = units - ? WHERE id=?',
+        args: [Number(order.qty), order.product_id],
+      });
+    }
+
+    await db.batch(statements, 'write');
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 400 });
@@ -31,17 +44,22 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(_, { params }) {
   try {
-    const db = getDb();
-    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(params.id);
+    const db = await getDb();
+
+    const { rows } = await db.execute({ sql: 'SELECT * FROM orders WHERE id=?', args: [params.id] });
+    const order = rows[0];
     if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const del = db.transaction(() => {
-      if (order.status !== 'Returned')
-        db.prepare('UPDATE products SET units = units + ? WHERE id=?').run(order.qty, order.product_id);
-      db.prepare('DELETE FROM orders WHERE id=?').run(params.id);
-    });
-    del();
-
+    const statements = [
+      { sql: 'DELETE FROM orders WHERE id=?', args: [params.id] },
+    ];
+    if (order.status !== 'Returned') {
+      statements.push({
+        sql: 'UPDATE products SET units = units + ? WHERE id=?',
+        args: [Number(order.qty), order.product_id],
+      });
+    }
+    await db.batch(statements, 'write');
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });

@@ -4,9 +4,13 @@ import { getDb } from '@/lib/db';
 export async function PUT(request, { params }) {
   try {
     const { name, phone, address } = await request.json();
-    const db = getDb();
-    db.prepare('UPDATE customers SET name=?,phone=?,address=? WHERE id=?').run(name, phone, address, params.id);
-    return NextResponse.json(db.prepare('SELECT * FROM customers WHERE id=?').get(params.id));
+    const db = await getDb();
+    await db.execute({
+      sql: 'UPDATE customers SET name=?,phone=?,address=? WHERE id=?',
+      args: [name, phone, address, params.id],
+    });
+    const { rows } = await db.execute({ sql: 'SELECT * FROM customers WHERE id=?', args: [params.id] });
+    return NextResponse.json(rows[0]);
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
@@ -14,8 +18,8 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(_, { params }) {
   try {
-    const db = getDb();
-    db.prepare('DELETE FROM customers WHERE id=?').run(params.id);
+    const db = await getDb();
+    await db.execute({ sql: 'DELETE FROM customers WHERE id=?', args: [params.id] });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
