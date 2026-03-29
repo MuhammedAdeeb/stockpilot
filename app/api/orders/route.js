@@ -38,19 +38,17 @@ export async function POST(request) {
     const total = Number(product.price) * qty;
     const date = new Date().toISOString().split('T')[0];
 
-    const statements = [
-      {
-        sql: 'INSERT INTO orders (id,customer_id,product_id,qty,total,status,date) VALUES (?,?,?,?,?,?,?)',
-        args: [orderId, customer_id, product_id, parseInt(qty), total, orderStatus, date],
-      },
-    ];
+    await db.execute({
+      sql: 'INSERT INTO orders (id,customer_id,product_id,qty,total,status,date) VALUES (?,?,?,?,?,?,?)',
+      args: [orderId, customer_id, product_id, parseInt(qty), total, orderStatus, date],
+    });
+
     if (orderStatus !== 'Returned') {
-      statements.push({
+      await db.execute({
         sql: 'UPDATE products SET units = units - ? WHERE id=?',
         args: [parseInt(qty), product_id],
       });
     }
-    await db.batch(statements, 'write');
 
     const { rows: oRows } = await db.execute({
       sql: `SELECT o.*, c.name as customer_name, p.name as product_name
