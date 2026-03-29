@@ -127,7 +127,7 @@ body {
 .stat-card.green::before  { background: var(--green); }
 .stat-card.red::before    { background: var(--red); }
 .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
-.stat-value { font-family: var(--font-head); font-size: 36px; font-weight: 800; letter-spacing: -1px; }
+.stat-value { font-family: var(--font-mono); font-size: 36px; font-weight: 500; letter-spacing: -1px; }
 .stat-value.yellow { color: var(--accent); }
 .stat-value.blue   { color: var(--accent2); }
 .stat-value.green  { color: var(--green); }

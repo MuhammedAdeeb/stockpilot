@@ -1,7 +1,7 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
-// ─── API helpers ────────────────────────────────────────────
+// ─── API helpers ─────────────────────────────────────────────
 async function api(path, options = {}) {
   const res = await fetch('/api' + path, {
     headers: { 'Content-Type': 'application/json' },
@@ -13,9 +13,10 @@ async function api(path, options = {}) {
   return data;
 }
 
-// ─── Toast ──────────────────────────────────────────────────
+// ─── Toast ───────────────────────────────────────────────────
 function Toast({ message, isError, onDone }) {
   useEffect(() => {
+    if (!message) return;
     const t = setTimeout(onDone, 3000);
     return () => clearTimeout(t);
   }, [message, onDone]);
@@ -23,12 +24,12 @@ function Toast({ message, isError, onDone }) {
   return <div className={`toast${isError ? ' error' : ''}`}>{message}</div>;
 }
 
-// ─── Spinner ────────────────────────────────────────────────
+// ─── Spinner ─────────────────────────────────────────────────
 function Spinner() {
   return <div className="loading"><div className="spinner" /><span>Loading...</span></div>;
 }
 
-// ─── Modal ──────────────────────────────────────────────────
+// ─── Modal ───────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -45,7 +46,7 @@ function Modal({ open, onClose, title, children }) {
   );
 }
 
-// ─── Stock Bar ──────────────────────────────────────────────
+// ─── Stock Bar ───────────────────────────────────────────────
 function StockBar({ units, max }) {
   const pct = max > 0 ? Math.max(Math.round((units / max) * 100), 0) : 0;
   const col = units === 0 ? 'var(--red)' : units < 10 ? 'var(--orange)' : 'var(--green)';
@@ -58,14 +59,12 @@ function StockBar({ units, max }) {
   );
 }
 
-// ─── Stock Badge ─────────────────────────────────────────────
 function StockBadge({ units }) {
   if (units === 0) return <span className="badge badge-red">Out of Stock</span>;
   if (units < 10)  return <span className="badge badge-orange">Low Stock</span>;
   return <span className="badge badge-green">In Stock</span>;
 }
 
-// ─── Order Status Badge ──────────────────────────────────────
 function StatusBadge({ status }) {
   const cls = status === 'Completed' ? 'badge-green' : status === 'Returned' ? 'badge-red' : 'badge-blue';
   return <span className={`badge ${cls}`}>{status}</span>;
@@ -83,16 +82,13 @@ function DonutChart({ pending, completed, returned }) {
       <svg width="90" height="90" viewBox="0 0 90 90">
         <circle cx="45" cy="45" r="35" fill="none" stroke="var(--surface2)" strokeWidth="14" />
         <circle cx="45" cy="45" r="35" fill="none" stroke="var(--accent2)" strokeWidth="14"
-          strokeDasharray={`${pendLen} ${circ - pendLen}`}
-          strokeDashoffset={0}
+          strokeDasharray={`${pendLen} ${circ - pendLen}`} strokeDashoffset={0}
           style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'all 0.5s' }} />
         <circle cx="45" cy="45" r="35" fill="none" stroke="var(--green)" strokeWidth="14"
-          strokeDasharray={`${compLen} ${circ - compLen}`}
-          strokeDashoffset={-pendLen}
+          strokeDasharray={`${compLen} ${circ - compLen}`} strokeDashoffset={-pendLen}
           style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'all 0.5s' }} />
         <circle cx="45" cy="45" r="35" fill="none" stroke="var(--red)" strokeWidth="14"
-          strokeDasharray={`${retLen} ${circ - retLen}`}
-          strokeDashoffset={-(pendLen + compLen)}
+          strokeDasharray={`${retLen} ${circ - retLen}`} strokeDashoffset={-(pendLen + compLen)}
           style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'all 0.5s' }} />
       </svg>
       <div className="donut-legend">
@@ -105,23 +101,22 @@ function DonutChart({ pending, completed, returned }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  PAGE COMPONENTS
+//  DASHBOARD
 // ════════════════════════════════════════════════════════════
-
-// ─── Dashboard ───────────────────────────────────────────────
-function Dashboard({ toast }) {
+function Dashboard({ refreshTick }) {
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    const [s, p] = await Promise.all([api('/dashboard'), api('/products')]);
-    setStats(s); setProducts(p);
-  }, []);
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([api('/dashboard'), api('/products')])
+      .then(([s, p]) => { setStats(s); setProducts(p); })
+      .finally(() => setLoading(false));
+  }, [refreshTick]); // re-runs every time any mutation happens anywhere
 
-  useEffect(() => { load(); }, [load]);
-
-  const lowStock = products.filter(p => p.units <= 10).sort((a, b) => a.units - b.units);
-  const maxUnits = Math.max(...products.map(p => p.units), 1);
+  const lowStock = products.filter(p => Number(p.units) <= 10).sort((a, b) => Number(a.units) - Number(b.units));
+  const maxUnits = Math.max(...products.map(p => Number(p.units)), 1);
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
 
   return (
@@ -132,21 +127,38 @@ function Dashboard({ toast }) {
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card yellow"><div className="stat-label">Total Products</div><div className="stat-value yellow">{stats?.total_products ?? '—'}</div><div className="stat-sub">SKUs in catalog</div></div>
-        <div className="stat-card blue"><div className="stat-label">Total Orders</div><div className="stat-value blue">{stats?.total_orders ?? '—'}</div><div className="stat-sub">All time</div></div>
-        <div className="stat-card green"><div className="stat-label">Completed</div><div className="stat-value green">{stats?.completed ?? '—'}</div><div className="stat-sub">Fulfilled orders</div></div>
-        <div className="stat-card red"><div className="stat-label">Returned</div><div className="stat-value red">{stats?.returned ?? '—'}</div><div className="stat-sub">Return requests</div></div>
+        <div className="stat-card yellow">
+          <div className="stat-label">Total Products</div>
+          <div className="stat-value yellow">{loading ? '—' : String(stats?.total_products ?? 0)}</div>
+          <div className="stat-sub">SKUs in catalog</div>
+        </div>
+        <div className="stat-card blue">
+          <div className="stat-label">Total Orders</div>
+          <div className="stat-value blue">{loading ? '—' : String(stats?.total_orders ?? 0)}</div>
+          <div className="stat-sub">All time</div>
+        </div>
+        <div className="stat-card green">
+          <div className="stat-label">Completed</div>
+          <div className="stat-value green">{loading ? '—' : String(stats?.completed ?? 0)}</div>
+          <div className="stat-sub">Fulfilled orders</div>
+        </div>
+        <div className="stat-card red">
+          <div className="stat-label">Returned</div>
+          <div className="stat-value red">{loading ? '—' : String(stats?.returned ?? 0)}</div>
+          <div className="stat-sub">Return requests</div>
+        </div>
       </div>
 
       <div className="charts-row">
         <div className="chart-card">
           <div className="chart-card-title">Stock Levels</div>
           <div className="bar-chart">
-            {products.length === 0
+            {loading ? <Spinner /> : products.length === 0
               ? <div style={{ color: 'var(--muted)', fontSize: 12, width: '100%', textAlign: 'center' }}>Add products to see chart</div>
               : products.slice(0, 6).map(p => {
-                  const pct = Math.max(Math.round((p.units / maxUnits) * 100), 4);
-                  const col = p.units === 0 ? 'var(--red)' : p.units < 10 ? 'var(--orange)' : 'var(--accent)';
+                  const u = Number(p.units);
+                  const pct = Math.max(Math.round((u / maxUnits) * 100), 4);
+                  const col = u === 0 ? 'var(--red)' : u < 10 ? 'var(--orange)' : 'var(--accent)';
                   return (
                     <div key={p.id} className="bar-col">
                       <div className="bar" style={{ height: `${pct}%`, background: col }} />
@@ -158,7 +170,9 @@ function Dashboard({ toast }) {
         </div>
         <div className="chart-card">
           <div className="chart-card-title">Order Status</div>
-          {stats ? <DonutChart pending={stats.pending} completed={stats.completed} returned={stats.returned} /> : <Spinner />}
+          {loading || !stats
+            ? <Spinner />
+            : <DonutChart pending={Number(stats.pending)} completed={Number(stats.completed)} returned={Number(stats.returned)} />}
         </div>
       </div>
 
@@ -167,16 +181,18 @@ function Dashboard({ toast }) {
         <table>
           <thead><tr><th>Product</th><th>Price</th><th>Units Left</th><th>Status</th></tr></thead>
           <tbody>
-            {lowStock.length === 0
-              ? <tr><td colSpan={4}><div className="empty-state"><div className="icon">✓</div><p>All products are well-stocked!</p></div></td></tr>
-              : lowStock.map(p => (
-                  <tr key={p.id}>
-                    <td className="font-head">{p.name}</td>
-                    <td className="text-accent">₹{p.price.toLocaleString()}</td>
-                    <td>{p.units}</td>
-                    <td><StockBadge units={p.units} /></td>
-                  </tr>
-                ))}
+            {loading
+              ? <tr><td colSpan={4}><Spinner /></td></tr>
+              : lowStock.length === 0
+                ? <tr><td colSpan={4}><div className="empty-state"><div className="icon">✓</div><p>All products are well-stocked!</p></div></td></tr>
+                : lowStock.map(p => (
+                    <tr key={p.id}>
+                      <td className="font-head">{p.name}</td>
+                      <td className="text-accent">₹{Number(p.price).toLocaleString()}</td>
+                      <td>{Number(p.units)}</td>
+                      <td><StockBadge units={Number(p.units)} /></td>
+                    </tr>
+                  ))}
           </tbody>
         </table>
       </div>
@@ -184,8 +200,10 @@ function Dashboard({ toast }) {
   );
 }
 
-// ─── Products ─────────────────────────────────────────────────
-function Products({ toast }) {
+// ════════════════════════════════════════════════════════════
+//  PRODUCTS
+// ════════════════════════════════════════════════════════════
+function Products({ toast, onMutate }) {
   const [products, setProducts] = useState(null);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
@@ -212,19 +230,25 @@ function Products({ toast }) {
         await api('/products', { method: 'POST', body: { name: form.name, price: +form.price, units: +form.units } });
         toast('Product added!');
       }
-      setModal(false); load();
+      setModal(false);
+      await load();
+      onMutate(); // notify root to refresh dashboard
     } catch (e) { toast(e.message, true); }
     finally { setSaving(false); }
   };
 
   const del = async (id) => {
     if (!confirm('Delete this product?')) return;
-    try { await api(`/products/${id}`, { method: 'DELETE' }); toast('Product deleted.'); load(); }
-    catch (e) { toast(e.message, true); }
+    try {
+      await api(`/products/${id}`, { method: 'DELETE' });
+      toast('Product deleted.');
+      await load();
+      onMutate();
+    } catch (e) { toast(e.message, true); }
   };
 
   const filtered = (products || []).filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
-  const maxUnits = Math.max(...(products || []).map(p => p.units), 1);
+  const maxUnits = Math.max(...(products || []).map(p => Number(p.units)), 1);
 
   return (
     <>
@@ -232,7 +256,6 @@ function Products({ toast }) {
         <div className="page-title">Products <span>Catalog</span></div>
         <button className="btn btn-primary" onClick={openAdd}>＋ Add Product</button>
       </div>
-
       <div className="table-wrap">
         <div className="table-header">
           <div className="table-title">All Products</div>
@@ -246,10 +269,10 @@ function Products({ toast }) {
               : filtered.map(p => (
                   <tr key={p.id}>
                     <td className="font-head">{p.name}</td>
-                    <td className="text-accent">₹{p.price.toLocaleString()}</td>
-                    <td>{p.units}</td>
-                    <td><StockBar units={p.units} max={maxUnits} /></td>
-                    <td><StockBadge units={p.units} /></td>
+                    <td className="text-accent">₹{Number(p.price).toLocaleString()}</td>
+                    <td>{Number(p.units)}</td>
+                    <td><StockBar units={Number(p.units)} max={maxUnits} /></td>
+                    <td><StockBadge units={Number(p.units)} /></td>
                     <td><div className="actions">
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}>Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={() => del(p.id)}>Delete</button>
@@ -259,7 +282,6 @@ function Products({ toast }) {
           </tbody>
         </table>
       </div>
-
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit Product' : 'Add Product'}>
         <div className="form-group"><label className="form-label">Product Name</label><input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Wireless Headphones" /></div>
         <div className="form-row">
@@ -275,8 +297,10 @@ function Products({ toast }) {
   );
 }
 
-// ─── Customers ───────────────────────────────────────────────
-function Customers({ toast }) {
+// ════════════════════════════════════════════════════════════
+//  CUSTOMERS
+// ════════════════════════════════════════════════════════════
+function Customers({ toast, onMutate }) {
   const [customers, setCustomers] = useState(null);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
@@ -303,15 +327,21 @@ function Customers({ toast }) {
         await api('/customers', { method: 'POST', body: form });
         toast('Customer added!');
       }
-      setModal(false); load();
+      setModal(false);
+      await load();
+      onMutate();
     } catch (e) { toast(e.message, true); }
     finally { setSaving(false); }
   };
 
   const del = async (id) => {
     if (!confirm('Delete this customer?')) return;
-    try { await api(`/customers/${id}`, { method: 'DELETE' }); toast('Customer deleted.'); load(); }
-    catch (e) { toast(e.message, true); }
+    try {
+      await api(`/customers/${id}`, { method: 'DELETE' });
+      toast('Customer deleted.');
+      await load();
+      onMutate();
+    } catch (e) { toast(e.message, true); }
   };
 
   const filtered = (customers || []).filter(c =>
@@ -324,7 +354,6 @@ function Customers({ toast }) {
         <div className="page-title">Customers <span>Directory</span></div>
         <button className="btn btn-primary" onClick={openAdd}>＋ Add Customer</button>
       </div>
-
       <div className="table-wrap">
         <div className="table-header">
           <div className="table-title">All Customers</div>
@@ -340,7 +369,7 @@ function Customers({ toast }) {
                     <td className="font-head">{c.name}</td>
                     <td className="mono" style={{ color: 'var(--text)' }}>{c.phone}</td>
                     <td>{c.address}</td>
-                    <td><span className="badge badge-yellow">{c.order_count} order{c.order_count !== 1 ? 's' : ''}</span></td>
+                    <td><span className="badge badge-yellow">{Number(c.order_count)} order{Number(c.order_count) !== 1 ? 's' : ''}</span></td>
                     <td><div className="actions">
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={() => del(c.id)}>Delete</button>
@@ -350,7 +379,6 @@ function Customers({ toast }) {
           </tbody>
         </table>
       </div>
-
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit Customer' : 'Add Customer'}>
         <div className="form-group"><label className="form-label">Full Name</label><input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Arjun Menon" /></div>
         <div className="form-group"><label className="form-label">Phone Number</label><input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" /></div>
@@ -364,8 +392,10 @@ function Customers({ toast }) {
   );
 }
 
-// ─── Orders ───────────────────────────────────────────────────
-function Orders({ toast }) {
+// ════════════════════════════════════════════════════════════
+//  ORDERS
+// ════════════════════════════════════════════════════════════
+function Orders({ toast, onMutate }) {
   const [orders, setOrders] = useState(null);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
@@ -381,20 +411,24 @@ function Orders({ toast }) {
 
   const openAdd = async () => {
     const [c, p] = await Promise.all([api('/customers'), api('/products')]);
-    setCustomers(c); setProducts(p.filter(x => x.units > 0));
-    setForm({ customer_id: c[0]?.id || '', product_id: p.find(x => x.units > 0)?.id || '', qty: 1, status: 'Pending' });
+    setCustomers(c);
+    setProducts(p.filter(x => Number(x.units) > 0));
+    setForm({ customer_id: c[0]?.id || '', product_id: p.find(x => Number(x.units) > 0)?.id || '', qty: 1, status: 'Pending' });
     setModal(true);
   };
 
   const selectedProduct = products.find(p => p.id === form.product_id);
-  const orderTotal = selectedProduct ? selectedProduct.price * (form.qty || 0) : 0;
+  const orderTotal = selectedProduct ? Number(selectedProduct.price) * (Number(form.qty) || 0) : 0;
 
   const save = async () => {
     if (!form.customer_id || !form.product_id || !form.qty) { toast('Please fill all fields.', true); return; }
     setSaving(true);
     try {
       await api('/orders', { method: 'POST', body: { ...form, qty: +form.qty } });
-      toast('Order placed!'); setModal(false); load();
+      toast('Order placed!');
+      setModal(false);
+      await load();
+      onMutate();
     } catch (e) { toast(e.message, true); }
     finally { setSaving(false); }
   };
@@ -402,14 +436,20 @@ function Orders({ toast }) {
   const changeStatus = async (id, status) => {
     try {
       await api(`/orders/${id}`, { method: 'PATCH', body: { status } });
-      toast(`Order ${id} → ${status}`); load();
+      toast(`Order ${id} → ${status}`);
+      await load();
+      onMutate();
     } catch (e) { toast(e.message, true); load(); }
   };
 
   const del = async (id) => {
     if (!confirm('Delete this order?')) return;
-    try { await api(`/orders/${id}`, { method: 'DELETE' }); toast('Order deleted.'); load(); }
-    catch (e) { toast(e.message, true); }
+    try {
+      await api(`/orders/${id}`, { method: 'DELETE' });
+      toast('Order deleted.');
+      await load();
+      onMutate();
+    } catch (e) { toast(e.message, true); }
   };
 
   const filtered = (orders || []).filter(o =>
@@ -422,7 +462,6 @@ function Orders({ toast }) {
         <div className="page-title">Orders <span>Management</span></div>
         <button className="btn btn-primary" onClick={openAdd}>＋ New Order</button>
       </div>
-
       <div className="table-wrap">
         <div className="table-header">
           <div className="table-title">All Orders</div>
@@ -438,17 +477,13 @@ function Orders({ toast }) {
                     <td className="mono" style={{ color: 'var(--accent)' }}>{o.id}</td>
                     <td className="font-head">{o.customer_name || '—'}</td>
                     <td>{o.product_name || '—'}</td>
-                    <td>{o.qty}</td>
-                    <td className="text-green">₹{o.total.toLocaleString()}</td>
+                    <td>{Number(o.qty)}</td>
+                    <td className="text-green">₹{Number(o.total).toLocaleString()}</td>
                     <td><StatusBadge status={o.status} /></td>
                     <td className="mono" style={{ color: 'var(--text)' }}>{o.date}</td>
                     <td><div className="actions">
-                      <select
-                        className="form-select"
-                        style={{ padding: '4px 8px', fontSize: 12, width: 120 }}
-                        value={o.status}
-                        onChange={e => changeStatus(o.id, e.target.value)}
-                      >
+                      <select className="form-select" style={{ padding: '4px 8px', fontSize: 12, width: 120 }}
+                        value={o.status} onChange={e => changeStatus(o.id, e.target.value)}>
                         <option>Pending</option>
                         <option>Completed</option>
                         <option>Returned</option>
@@ -460,7 +495,6 @@ function Orders({ toast }) {
           </tbody>
         </table>
       </div>
-
       <Modal open={modal} onClose={() => setModal(false)} title="New Order">
         <div className="form-group">
           <label className="form-label">Customer</label>
@@ -473,7 +507,7 @@ function Orders({ toast }) {
           <label className="form-label">Product</label>
           <select className="form-select" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))}>
             {products.length === 0 ? <option disabled>No products in stock</option>
-              : products.map(p => <option key={p.id} value={p.id}>{p.name} (₹{p.price.toLocaleString()}) — {p.units} left</option>)}
+              : products.map(p => <option key={p.id} value={p.id}>{p.name} (₹{Number(p.price).toLocaleString()}) — {Number(p.units)} left</option>)}
           </select>
         </div>
         <div className="form-row">
@@ -506,7 +540,7 @@ function Orders({ toast }) {
 // ════════════════════════════════════════════════════════════
 export default function Home() {
   const [page, setPage] = useState('dashboard');
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [toastMsg, setToastMsg] = useState('');
   const [toastError, setToastError] = useState(false);
 
@@ -514,14 +548,10 @@ export default function Home() {
     setToastMsg(msg); setToastError(isError);
   }, []);
 
-  const navigate = useCallback((key) => {
-    setPage(key);
-    // Increment refreshKey every time dashboard is selected so it remounts and refetches
-    if (key === 'dashboard') setRefreshKey(k => k + 1);
+  // Called by any page after any add/edit/delete — increments tick which Dashboard watches
+  const onMutate = useCallback(() => {
+    setRefreshTick(t => t + 1);
   }, []);
-
-  const pages = { dashboard: Dashboard, products: Products, orders: Orders, customers: Customers };
-  const PageComponent = pages[page];
 
   const navItems = [
     { key: 'dashboard', icon: '◈', label: 'Dashboard' },
@@ -530,16 +560,13 @@ export default function Home() {
     { key: 'customers', icon: '◉', label: 'Customers' },
   ];
 
-  // Use refreshKey as part of the key for dashboard so it remounts on every visit
-  const componentKey = page === 'dashboard' ? `dashboard-${refreshKey}` : page;
-
   return (
     <div className="layout">
       <nav className="sidebar">
         <div className="logo">StockPilot<span>Inventory System</span></div>
         <div className="nav">
           {navItems.map(n => (
-            <div key={n.key} className={`nav-link${page === n.key ? ' active' : ''}`} onClick={() => navigate(n.key)}>
+            <div key={n.key} className={`nav-link${page === n.key ? ' active' : ''}`} onClick={() => setPage(n.key)}>
               <span className="nav-icon">{n.icon}</span>
               <span>{n.label}</span>
             </div>
@@ -548,7 +575,13 @@ export default function Home() {
       </nav>
 
       <main className="main">
-        <PageComponent key={componentKey} toast={showToast} />
+        {/* Dashboard always stays mounted and reacts to refreshTick */}
+        <div style={{ display: page === 'dashboard' ? 'block' : 'none' }}>
+          <Dashboard refreshTick={refreshTick} />
+        </div>
+        {page === 'products'  && <Products  key="products"  toast={showToast} onMutate={onMutate} />}
+        {page === 'orders'    && <Orders    key="orders"    toast={showToast} onMutate={onMutate} />}
+        {page === 'customers' && <Customers key="customers" toast={showToast} onMutate={onMutate} />}
       </main>
 
       <Toast message={toastMsg} isError={toastError} onDone={() => setToastMsg('')} />
