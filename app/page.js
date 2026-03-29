@@ -562,6 +562,7 @@ export default function Home() {
 
   return (
     <div className="layout">
+      {/* Desktop sidebar */}
       <nav className="sidebar">
         <div className="logo">StockPilot<span>Inventory System</span></div>
         <div className="nav">
@@ -572,6 +573,16 @@ export default function Home() {
             </div>
           ))}
         </div>
+      </nav>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="mobile-nav">
+        {navItems.map(n => (
+          <div key={n.key} className={`mobile-nav-item${page === n.key ? ' active' : ''}`} onClick={() => setPage(n.key)}>
+            <span className="nav-icon">{n.icon}</span>
+            <span>{n.label}</span>
+          </div>
+        ))}
       </nav>
 
       <main className="main">
